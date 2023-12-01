@@ -18,13 +18,15 @@ type languageServer struct {
 }
 
 func (s *languageServer) initialize(ctx context.Context, conn *jsonrpc2.Conn, params lsp.InitializeParams) (*lsp.InitializeResult, error) {
+	textDocSyncOpts := lsp.TextDocumentSyncOptions{
+		OpenClose: true,
+		Change:    lsp.Full,
+	}
+
 	return &lsp.InitializeResult{
 		Capabilities: lsp.ServerCapabilities{
-			TextDocumentSync: lsp.TextDocumentSyncOptions{
-				OpenClose: true,
-				Change:    lsp.Full,
-			},
-			HoverProvider: true,
+			TextDocumentSync: textDocSyncOpts,
+			HoverProvider:    true,
 		},
 	}, nil
 }
