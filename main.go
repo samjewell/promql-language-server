@@ -8,9 +8,9 @@ import (
 	"sync"
 
 	"github.com/prometheus/prometheus/promql"
-	"golang.org/x/tools/jsonrpc2"
-	"golang.org/x/tools/lsp"
-	"golang.org/x/tools/lsp/protocol"
+	"golang.org/x/tools/internal/jsonrpc2"
+	"golang.org/x/tools/internal/lsp"
+	"golang.org/x/tools/internal/lsp/protocol"
 )
 
 type promQLLanguageServer struct {
