@@ -3,36 +3,47 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
+	"log"
 	"strings"
 	"sync"
 
 	"github.com/prometheus/prometheus/promql"
-	"golang.org/x/tools/internal/jsonrpc2"
-	"golang.org/x/tools/internal/lsp"
-	"golang.org/x/tools/internal/lsp/protocol"
+	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/sourcegraph/jsonrpc2"
 )
 
-type promQLLanguageServer struct {
+type languageServer struct {
 	mu   sync.Mutex
-	Docs map[protocol.DocumentURI]string
+	Docs map[lsp.DocumentURI]string
 }
 
-func (s *promQLLanguageServer) DidOpen(ctx context.Context, conn *jsonrpc2.Conn, params *protocol.DidOpenTextDocumentParams) error {
+func (s *languageServer) initialize(ctx context.Context, conn *jsonrpc2.Conn, params lsp.InitializeParams) (*lsp.InitializeResult, error) {
+	return &lsp.InitializeResult{
+		Capabilities: lsp.ServerCapabilities{
+			TextDocumentSync: lsp.TextDocumentSyncOptions{
+				OpenClose: true,
+				Change:    lsp.Full,
+			},
+			HoverProvider: true,
+		},
+	}, nil
+}
+
+func (s *languageServer) didOpen(ctx context.Context, conn *jsonrpc2.Conn, params lsp.DidOpenTextDocumentParams) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Docs[params.TextDocument.URI] = params.TextDocument.Text
 	return nil
 }
 
-func (s *promQLLanguageServer) DidChange(ctx context.Context, conn *jsonrpc2.Conn, params *protocol.DidChangeTextDocumentParams) error {
+func (s *languageServer) didChange(ctx context.Context, conn *jsonrpc2.Conn, params lsp.DidChangeTextDocumentParams) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Docs[params.TextDocument.URI] = params.ContentChanges[0].Text
 	return nil
 }
 
-func (s *promQLLanguageServer) Hover(ctx context.Context, conn *jsonrpc2.Conn, params *protocol.TextDocumentPositionParams) (*protocol.Hover, error) {
+func (s *languageServer) hover(ctx context.Context, conn *jsonrpc2.Conn, params lsp.TextDocumentPositionParams) (*lsp.Hover, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -68,10 +79,9 @@ func (s *promQLLanguageServer) Hover(ctx context.Context, conn *jsonrpc2.Conn, p
 
 	// Provide a simple hover response
 	hoverText := fmt.Sprintf("Valid PromQL expression: %s", word)
-	return &protocol.Hover{
-		Contents: protocol.MarkupContent{
-			Kind:  protocol.Markdown,
-			Value: hoverText,
+	return &lsp.Hover{
+		Contents: []lsp.MarkedString{
+			{Language: "promql", Value: hoverText},
 		},
 	}, nil
 }
@@ -81,10 +91,15 @@ func isWordChar(ch byte) bool {
 }
 
 func main() {
-	server := &promQLLanguageServer{
-		Docs: make(map[protocol.DocumentURI]string),
+	server := &languageServer{
+		Docs: make(map[lsp.DocumentURI]string),
 	}
 
-	serverHandler := lsp.NewHandler(server)
-	<-jsonrpc2.NewConn(context.Background(), jsonrpc2.NewBufferedStream(os.Stdin, os.Stdout), serverHandler).Wait()
+	handler := jsonrpc2.HandlerWithError(server.handle)
+	serverConn := jsonrpc2.NewConn(context.Background(), jsonrpc2.NewBufferedStream(stdin, stdout), handler)
+
+	log.Println("Language server started")
+	if err := serverConn.Wait(); err != nil {
+		log.Fatal(err)
+	}
 }
